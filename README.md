@@ -12,6 +12,7 @@ Timeline:
 * 2021-07-02 Received reference to FPGA repository (https://gitee.com/kombi/icopy_fpga_3s_0921)
   * Mirrored as upstream in https://github.com/iCopy-X-Community/icopyx-community-fpga
   * I created a diff in [fpga](fpga) subdirectory to compare Verilog files with FPGA code from Proxmark3
+  * A document in Chinese details these changes, cf [fpga](fpga) subdirectory. Translation at https://github.com/iCopy-X-Community/icopyx-community-hw
 * 2021-07-02 Received proxmark3 sources
   * Available in [proxmark3](proxmark3) subdirectory, working on it in https://github.com/iCopy-X-Community/icopyx-community-pm3
   * They shared both the original repo at the point they cloned it and their sources. I removed the unneccesary original repo copy from the zip.
