@@ -17,3 +17,8 @@ Timeline:
   * They shared both the original repo at the point they cloned it and their sources. I removed the unneccesary original repo copy from the zip.
   * They forked at 29c8b3aa4ee8cb3d66a1542d95740d996abe201f and removed the `fpga/` as there is a separate repository for PFGA, see previous point.
   * I created a diff in [proxmark3](proxmark3) subdirectory to get an overview of their change besides `fpga/` removal.
+
+Missing parts:
+
+* STM32 and W25Q80
+* app.py
