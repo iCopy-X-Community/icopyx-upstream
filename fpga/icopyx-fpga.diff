@@ -1,0 +1,747 @@
+diff -Naur fpga/define.v fpga/define.v
+--- fpga/define.v	1970-01-01 01:00:00.000000000 +0100
++++ fpga/define.v	2021-07-02 09:47:41.478286478 +0200
+@@ -0,0 +1,49 @@
++// Defining commands, modes and options. This must be aligned to the definitions in fpgaloader.h
++// Note: the definitions here are without shifts
++
++// Commands:
++`define FPGA_CMD_SET_CONFREG                        1
++`define FPGA_CMD_TRACE_ENABLE                       2
++
++// Major modes:
++`define FPGA_MAJOR_MODE_HF_READER                   0
++`define FPGA_MAJOR_MODE_HF_SIMULATOR                1
++`define FPGA_MAJOR_MODE_HF_ISO14443A                2
++`define FPGA_MAJOR_MODE_HF_SNIFF                    3
++`define FPGA_MAJOR_MODE_HF_ISO18092                 4
++`define FPGA_MAJOR_MODE_HF_GET_TRACE                5
++`define FPGA_MAJOR_MODE_OFF                         7
++
++// Options for the generic HF reader
++`define FPGA_HF_READER_MODE_RECEIVE_IQ              0
++`define FPGA_HF_READER_MODE_RECEIVE_AMPLITUDE       1
++`define FPGA_HF_READER_MODE_RECEIVE_PHASE           2
++`define FPGA_HF_READER_MODE_SEND_FULL_MOD           3
++`define FPGA_HF_READER_MODE_SEND_SHALLOW_MOD        4
++`define FPGA_HF_READER_MODE_SNIFF_IQ                5
++`define FPGA_HF_READER_MODE_SNIFF_AMPLITUDE         6
++`define FPGA_HF_READER_MODE_SNIFF_PHASE             7
++`define FPGA_HF_READER_MODE_SEND_JAM                8
++
++`define FPGA_HF_READER_SUBCARRIER_848_KHZ           0
++`define FPGA_HF_READER_SUBCARRIER_424_KHZ           1
++`define FPGA_HF_READER_SUBCARRIER_212_KHZ           2
++
++// Options for the HF simulated tag, how to modulate
++`define FPGA_HF_SIMULATOR_NO_MODULATION             0
++`define FPGA_HF_SIMULATOR_MODULATE_BPSK             1
++`define FPGA_HF_SIMULATOR_MODULATE_212K             2
++`define FPGA_HF_SIMULATOR_MODULATE_424K             4
++`define FPGA_HF_SIMULATOR_MODULATE_424K_8BIT        5
++
++// Options for ISO14443A
++`define FPGA_HF_ISO14443A_SNIFFER                   0
++`define FPGA_HF_ISO14443A_TAGSIM_LISTEN             1
++`define FPGA_HF_ISO14443A_TAGSIM_MOD                2
++`define FPGA_HF_ISO14443A_READER_LISTEN             3
++`define FPGA_HF_ISO14443A_READER_MOD                4
++
++//options for ISO18092 / Felica
++`define FPGA_HF_ISO18092_FLAG_NOMOD                 1 // 0001 disable modulation module
++`define FPGA_HF_ISO18092_FLAG_424K                  2 // 0010 should enable 414k mode (untested). No autodetect
++`define FPGA_HF_ISO18092_FLAG_READER                4 // 0100 enables antenna power, to act as a reader instead of tag
+\ No newline at end of file
+diff -Naur fpga/fpga_allinone.v fpga/fpga_allinone.v
+--- fpga/fpga_allinone.v	1970-01-01 01:00:00.000000000 +0100
++++ fpga/fpga_allinone.v	2021-07-02 09:47:41.478286478 +0200
+@@ -0,0 +1,81 @@
++//////////////////////////////////////////////////////////////////////////////////
++// Company: 
++// Engineer: 
++// 
++// Create Date:    16:09:14 05/13/2020 
++// Design Name: 
++// Module Name:    fpga_all_in_one 
++// Project Name: 
++// Target Devices: 
++// Tool versions: 
++// Description: 
++//
++// Dependencies: 
++//
++// Revision: 
++// Revision 0.01 - File Created
++// Additional Comments: 
++//
++//////////////////////////////////////////////////////////////////////////////////
++module fpga_hf(
++    input spck, output miso, input mosi, input ncs,
++    input pck0, input ck_1356meg, input ck_1356megb,
++    output pwr_lo, output pwr_hi,
++    output pwr_oe1, output pwr_oe2, output pwr_oe3, output pwr_oe4,
++    input [7:0] adc_d, output adc_clk, output adc_noe,
++    output ssp_frame, output ssp_din, input ssp_dout, output ssp_clk,
++    input cross_hi, input cross_lo,
++    output dbg,
++	 output PWR_LO_EN,
++	 input FPGA_SWITCH
++    );
++	 
++	 
++fpga_hfmod hfmod(
++    hfspck, hfmiso, hfmosi, hfncs,
++    hfpck0, hfck_1356meg, hfck_1356megb,
++    hfpwr_lo, hfpwr_hi,
++    hfpwr_oe1, hfpwr_oe2, hfpwr_oe3, hfpwr_oe4,
++    adc_d, hfadc_clk, hfadc_noe,
++    hfssp_frame, hfssp_din, hfssp_dout, hfssp_clk,
++    hfcross_hi, hfcross_lo,
++    hfdbg
++);
++
++fpga_lfmod lfmod(
++    lfspck, lfmiso, lfmosi, lfncs,
++    lfpck0, lfck_1356meg, lfck_1356megb,
++    lfpwr_lo, lfpwr_hi,
++    lfpwr_oe1, lfpwr_oe2, lfpwr_oe3, lfpwr_oe4,
++    adc_d, lfadc_clk, lfadc_noe,
++    lfssp_frame, lfssp_din, lfssp_dout, lfssp_clk,
++    lfcross_hi, lfcross_lo,
++    lfdbg,
++	 lfPWR_LO_EN
++);
++
++mux2_oneout 		mux_spck_all 				(FPGA_SWITCH, spck, 			hfspck, 			lfspck);
++mux2_one 			mux_miso_all 				(FPGA_SWITCH, miso, 			hfmiso, 			lfmiso);
++mux2_oneout 		mux_mosi_all 				(FPGA_SWITCH, mosi, 			hfmosi, 			lfmosi);
++mux2_oneout 		mux_ncs_all 				(FPGA_SWITCH, ncs, 			hfncs, 			lfncs);
++mux2_oneout 		mux_pck0_all 				(FPGA_SWITCH, pck0, 			hfpck0, 			lfpck0);
++mux2_oneout 		mux_ck_1356meg_all 		(FPGA_SWITCH, ck_1356meg, 	hfck_1356meg, 	lfck_1356meg);
++mux2_oneout 		mux_ck_1356megb_all 		(FPGA_SWITCH, ck_1356megb, hfck_1356megb, lfck_1356megb);
++mux2_one 			mux_pwr_lo_all 			(FPGA_SWITCH, pwr_lo, 		hfpwr_lo, 		lfpwr_lo);
++mux2_one 			mux_pwr_hi_all 			(FPGA_SWITCH, pwr_hi, 		hfpwr_hi, 		lfpwr_hi);
++mux2_one 			mux_pwr_oe1_all 			(FPGA_SWITCH, pwr_oe1, 		hfpwr_oe1, 		lfpwr_oe1);
++mux2_one 			mux_pwr_oe2_all 			(FPGA_SWITCH, pwr_oe2, 		hfpwr_oe2, 		lfpwr_oe2);
++mux2_one 			mux_pwr_oe3_all 			(FPGA_SWITCH, pwr_oe3, 		hfpwr_oe3, 		lfpwr_oe3);
++mux2_one 			mux_pwr_oe4_all 			(FPGA_SWITCH, pwr_oe4, 		hfpwr_oe4, 		lfpwr_oe4);
++mux2_one 			mux_adc_clk_all 			(FPGA_SWITCH, adc_clk, 		hfadc_clk, 		lfadc_clk);
++mux2_one		 		mux_adc_noe_all 			(FPGA_SWITCH, adc_noe, 		adc_noe, 		lfadc_noe);
++mux2_one 			mux_ssp_frame_all 		(FPGA_SWITCH, ssp_frame, 	hfssp_frame, 	lfssp_frame);
++mux2_one 			mux_ssp_din_all 			(FPGA_SWITCH, ssp_din, 		hfssp_din, 		lfssp_din);
++mux2_oneout 		mux_ssp_dout_all 			(FPGA_SWITCH, ssp_dout, 	hfssp_dout, 	lfssp_dout);
++mux2_one 			mux_ssp_clk_all 			(FPGA_SWITCH, ssp_clk, 		hfssp_clk, 		lfssp_clk);
++mux2_oneout 		mux_cross_hi_all 			(FPGA_SWITCH, cross_hi, 	hfcross_hi, 	lfcross_hi);
++mux2_oneout 		mux_cross_lo_all 			(FPGA_SWITCH, cross_lo, 	hfcross_lo, 	lfcross_lo);
++mux2_one 			mux_dbg_all 				(FPGA_SWITCH, dbg, 			hfdbg, 			lfdbg);
++mux2_one 			mux_PWR_LO_EN_all 		(FPGA_SWITCH, PWR_LO_EN, 	1'b0, 	      lfPWR_LO_EN);
++
++endmodule
+diff -Naur fpga/fpga_felica.v fpga/fpga_felica.v
+--- fpga/fpga_felica.v	2021-07-02 13:37:45.898134881 +0200
++++ fpga/fpga_felica.v	1970-01-01 01:00:00.000000000 +0100
+@@ -1,226 +0,0 @@
+-//-----------------------------------------------------------------------------
+-// The FPGA is responsible for interfacing between the A/D, the coil drivers,
+-// and the ARM. In the low-frequency modes it passes the data straight
+-// through, so that the ARM gets raw A/D samples over the SSP. In the high-
+-// frequency modes, the FPGA might perform some demodulation first, to
+-// reduce the amount of data that we must send to the ARM.
+-//
+-// I am not really an FPGA/ASIC designer, so I am sure that a lot of this
+-// could be improved.
+-//
+-// Jonathan Westhues, March 2006
+-// Added ISO14443-A support by Gerhard de Koning Gans, April 2008
+-// iZsh <izsh at fail0verflow.com>, June 2014
+-// Piwi, Feb 2019
+-//-----------------------------------------------------------------------------
+-
+-
+-// Defining commands, modes and options. This must be aligned to the definitions in fpgaloader.h
+-// Note: the definitions here are without shifts
+-
+-// Commands:
+-`define FPGA_CMD_SET_CONFREG                        1
+-`define FPGA_CMD_TRACE_ENABLE                       2
+-
+-// Major modes:
+-`define FPGA_MAJOR_MODE_HF_READER                   0
+-`define FPGA_MAJOR_MODE_HF_SIMULATOR                1
+-`define FPGA_MAJOR_MODE_HF_ISO14443A                2
+-`define FPGA_MAJOR_MODE_HF_SNIFF                    3
+-`define FPGA_MAJOR_MODE_HF_ISO18092                 4
+-`define FPGA_MAJOR_MODE_HF_GET_TRACE                5
+-`define FPGA_MAJOR_MODE_OFF                         7
+-
+-// Options for the generic HF reader
+-`define FPGA_HF_READER_MODE_RECEIVE_IQ              0
+-`define FPGA_HF_READER_MODE_RECEIVE_AMPLITUDE       1
+-`define FPGA_HF_READER_MODE_RECEIVE_PHASE           2
+-`define FPGA_HF_READER_MODE_SEND_FULL_MOD           3
+-`define FPGA_HF_READER_MODE_SEND_SHALLOW_MOD        4
+-`define FPGA_HF_READER_MODE_SNIFF_IQ                5
+-`define FPGA_HF_READER_MODE_SNIFF_AMPLITUDE         6
+-`define FPGA_HF_READER_MODE_SNIFF_PHASE             7
+-`define FPGA_HF_READER_MODE_SEND_JAM                8
+-
+-`define FPGA_HF_READER_SUBCARRIER_848_KHZ           0
+-`define FPGA_HF_READER_SUBCARRIER_424_KHZ           1
+-`define FPGA_HF_READER_SUBCARRIER_212_KHZ           2
+-
+-// Options for the HF simulated tag, how to modulate
+-`define FPGA_HF_SIMULATOR_NO_MODULATION             0
+-`define FPGA_HF_SIMULATOR_MODULATE_BPSK             1
+-`define FPGA_HF_SIMULATOR_MODULATE_212K             2
+-`define FPGA_HF_SIMULATOR_MODULATE_424K             4
+-`define FPGA_HF_SIMULATOR_MODULATE_424K_8BIT        5
+-
+-// Options for ISO14443A
+-`define FPGA_HF_ISO14443A_SNIFFER                   0
+-`define FPGA_HF_ISO14443A_TAGSIM_LISTEN             1
+-`define FPGA_HF_ISO14443A_TAGSIM_MOD                2
+-`define FPGA_HF_ISO14443A_READER_LISTEN             3
+-`define FPGA_HF_ISO14443A_READER_MOD                4
+-
+-//options for ISO18092 / Felica
+-`define FPGA_HF_ISO18092_FLAG_NOMOD                 1 // 0001 disable modulation module
+-`define FPGA_HF_ISO18092_FLAG_424K                  2 // 0010 should enable 414k mode (untested). No autodetect
+-`define FPGA_HF_ISO18092_FLAG_READER                4 // 0100 enables antenna power, to act as a reader instead of tag
+-
+-`include "hi_reader.v"
+-`include "hi_simulate.v"
+-//`include "hi_iso14443a.v"
+-`include "hi_sniffer.v"
+-`include "util.v"
+-`include "hi_flite.v"
+-`include "hi_get_trace.v"
+-
+-module fpga_felica(
+-    input spck, output miso, input mosi, input ncs,
+-    input pck0, input ck_1356meg, input ck_1356megb,
+-    output pwr_lo, output pwr_hi,
+-    output pwr_oe1, output pwr_oe2, output pwr_oe3, output pwr_oe4,
+-    input [7:0] adc_d, output adc_clk, output adc_noe,
+-    output ssp_frame, output ssp_din, input ssp_dout, output ssp_clk,
+-    input cross_hi, input cross_lo,
+-    output dbg
+-);
+-
+-//-----------------------------------------------------------------------------
+-// The SPI receiver. This sets up the configuration word, which the rest of
+-// the logic looks at to determine how to connect the A/D and the coil
+-// drivers (i.e., which section gets it). Also assign some symbolic names
+-// to the configuration bits, for use below.
+-//-----------------------------------------------------------------------------
+-
+-/*
+- Attempt to write up how its hooked up. Iceman 2020.
+-
+- Communication between ARM / FPGA is done inside armsrc/fpgaloader.c see: function FpgaSendCommand()
+- Send 16 bit command / data pair to FPGA
+- The bit format is: C3 C2 C1 C0 D11 D10 D9 D8 D7 D6 D5 D4 D3 D2 D1 D0
+- where
+-   C is 4bit command
+-   D is 12bit data
+-
+-  shift_reg receive this 16bit frame
+-
+-
+------+--------- frame layout --------------------
+-bit  |    15 14 13 12 11 10 9 8 7 6 5 4 3 2 1 0
+------+-------------------------------------------
+-cmd  |     x  x  x  x
+-major|                          x x x
+-opt  |                                    x x x
+-divi |                          x x x x x x x x
+-thres|                          x x x x x x x x
+------+-------------------------------------------
+-*/
+-
+-reg [15:0] shift_reg;
+-reg [8:0] conf_word;
+-reg trace_enable;
+-
+-// We switch modes between transmitting to the 13.56 MHz tag and receiving
+-// from it, which means that we must make sure that we can do so without
+-// glitching, or else we will glitch the transmitted carrier.
+-always @(posedge ncs)
+-begin
+-    case(shift_reg[15:12])
+-        `FPGA_CMD_SET_CONFREG:  conf_word <= shift_reg[8:0];
+-        `FPGA_CMD_TRACE_ENABLE: trace_enable <= shift_reg[0];
+-    endcase
+-end
+-
+-always @(posedge spck)
+-begin
+-    if(~ncs)
+-    begin
+-        shift_reg[15:1] <= shift_reg[14:0];
+-        shift_reg[0] <= mosi;
+-    end
+-end
+-
+-// select module (outputs) based on major mode
+-wire [2:0] major_mode = conf_word[8:6];
+-
+-// configuring the HF reader
+-wire [1:0] subcarrier_frequency = conf_word[5:4];
+-wire [3:0] minor_mode = conf_word[3:0];
+-
+-//-----------------------------------------------------------------------------
+-// And then we instantiate the modules corresponding to each of the FPGA's
+-// major modes, and use muxes to connect the outputs of the active mode to
+-// the output pins.
+-//-----------------------------------------------------------------------------
+-
+-// 000 - HF reader
+-hi_reader hr(
+-	ck_1356megb,
+-	hr_pwr_lo, hr_pwr_hi, hr_pwr_oe1, hr_pwr_oe2, hr_pwr_oe3, hr_pwr_oe4,
+-	adc_d, hr_adc_clk,
+-	hr_ssp_frame, hr_ssp_din, ssp_dout, hr_ssp_clk,
+-	hr_dbg,
+-	subcarrier_frequency, minor_mode
+-);
+-
+-// 001 - HF simulated tag
+-hi_simulate hs(
+-	ck_1356meg,
+-    hs_pwr_lo, hs_pwr_hi, hs_pwr_oe1, hs_pwr_oe2, hs_pwr_oe3, hs_pwr_oe4,
+-    adc_d, hs_adc_clk,
+-    hs_ssp_frame, hs_ssp_din, ssp_dout, hs_ssp_clk,
+-    hs_dbg,
+-	minor_mode
+-);
+-
+-// 011 - HF sniff
+-hi_sniffer he(
+-    ck_1356megb,
+-    he_pwr_lo, he_pwr_hi, he_pwr_oe1, he_pwr_oe2, he_pwr_oe3, he_pwr_oe4,
+-    adc_d, he_adc_clk,
+-    he_ssp_frame, he_ssp_din, he_ssp_clk
+-);
+-
+-// 100 - HF ISO18092 FeliCa
+-hi_flite hfl(
+-    ck_1356megb,
+-    hfl_pwr_lo, hfl_pwr_hi, hfl_pwr_oe1, hfl_pwr_oe2, hfl_pwr_oe3, hfl_pwr_oe4,
+-    adc_d, hfl_adc_clk,
+-    hfl_ssp_frame, hfl_ssp_din, ssp_dout, hfl_ssp_clk,
+-    hfl_dbg,
+-    minor_mode
+-);
+-
+-// 101 - HF get trace
+-hi_get_trace gt(
+-	ck_1356megb,
+-	adc_d, trace_enable, major_mode,
+-	gt_ssp_frame, gt_ssp_din, gt_ssp_clk
+-);
+-
+-// Major modes:
+-//   000 --  HF reader; subcarrier frequency and modulation depth selectable
+-//   001 --  HF simulated tag
+-//   010 --  HF ISO14443-A - removed for space...
+-//   011 --  HF sniff
+-//   100 --  HF ISO18092 FeliCa
+-//   101 --  HF get trace
+-//   110 --  unused
+-//   111 --  FPGA_MAJOR_MODE_OFF
+-
+-//                                         000           001           010     011           100            101           110   111
+-mux8 mux_ssp_clk   (major_mode, ssp_clk,   hr_ssp_clk,   hs_ssp_clk,   1'b0,   he_ssp_clk,   hfl_ssp_clk,   gt_ssp_clk,   1'b0, 1'b0);
+-mux8 mux_ssp_din   (major_mode, ssp_din,   hr_ssp_din,   hs_ssp_din,   1'b0,   he_ssp_din,   hfl_ssp_din,   gt_ssp_din,   1'b0, 1'b0);
+-mux8 mux_ssp_frame (major_mode, ssp_frame, hr_ssp_frame, hs_ssp_frame, 1'b0,   he_ssp_frame, hfl_ssp_frame, gt_ssp_frame, 1'b0, 1'b0);
+-mux8 mux_pwr_oe1   (major_mode, pwr_oe1,   hr_pwr_oe1,   hs_pwr_oe1,   1'b0,   he_pwr_oe1,   hfl_pwr_oe1,   1'b0,         1'b0, 1'b0);
+-mux8 mux_pwr_oe2   (major_mode, pwr_oe2,   hr_pwr_oe2,   hs_pwr_oe2,   1'b0,   he_pwr_oe2,   hfl_pwr_oe2,   1'b0,         1'b0, 1'b0);
+-mux8 mux_pwr_oe3   (major_mode, pwr_oe3,   hr_pwr_oe3,   hs_pwr_oe3,   1'b0,   he_pwr_oe3,   hfl_pwr_oe3,   1'b0,         1'b0, 1'b0);
+-mux8 mux_pwr_oe4   (major_mode, pwr_oe4,   hr_pwr_oe4,   hs_pwr_oe4,   1'b0,   he_pwr_oe4,   hfl_pwr_oe4,   1'b0,         1'b0, 1'b0);
+-mux8 mux_pwr_lo    (major_mode, pwr_lo,    hr_pwr_lo,    hs_pwr_lo,    1'b0,   he_pwr_lo,    hfl_pwr_lo,    1'b0,         1'b0, 1'b0);
+-mux8 mux_pwr_hi    (major_mode, pwr_hi,    hr_pwr_hi,    hs_pwr_hi,    1'b0,   he_pwr_hi,    hfl_pwr_hi,    1'b0,         1'b0, 1'b0);
+-mux8 mux_adc_clk   (major_mode, adc_clk,   hr_adc_clk,   hs_adc_clk,   1'b0,   he_adc_clk,   hfl_adc_clk,   1'b0,         1'b0, 1'b0);
+-mux8 mux_dbg       (major_mode, dbg,       hr_dbg,       hs_dbg,       1'b0,   he_dbg,       hfl_dbg,       1'b0,         1'b0, 1'b0);
+-
+-// In all modes, let the ADC's outputs be enabled.
+-assign adc_noe = 1'b0;
+-
+-endmodule
+diff -Naur fpga/fpga_hf.v fpga/fpga_hf.v
+--- fpga/fpga_hf.v	2021-07-02 13:37:45.898134881 +0200
++++ fpga/fpga_hf.v	2021-07-02 09:47:41.478286478 +0200
+@@ -14,66 +14,20 @@
+ // Piwi, Feb 2019
+ //-----------------------------------------------------------------------------
+ 
++//For ISE 10.1 PROJ,IDE cannot apply definition to all files
++`include "define.v"
+ 
+-// Defining commands, modes and options. This must be aligned to the definitions in fpgaloader.h
+-// Note: the definitions here are without shifts
+ 
+-// Commands:
+-`define FPGA_CMD_SET_CONFREG                        1
+-`define FPGA_CMD_TRACE_ENABLE                       2
+-
+-// Major modes:
+-`define FPGA_MAJOR_MODE_HF_READER                   0
+-`define FPGA_MAJOR_MODE_HF_SIMULATOR                1
+-`define FPGA_MAJOR_MODE_HF_ISO14443A                2
+-`define FPGA_MAJOR_MODE_HF_SNIFF                    3
+-`define FPGA_MAJOR_MODE_HF_ISO18092                 4
+-`define FPGA_MAJOR_MODE_HF_GET_TRACE                5
+-`define FPGA_MAJOR_MODE_OFF                         7
+-
+-// Options for the generic HF reader
+-`define FPGA_HF_READER_MODE_RECEIVE_IQ              0
+-`define FPGA_HF_READER_MODE_RECEIVE_AMPLITUDE       1
+-`define FPGA_HF_READER_MODE_RECEIVE_PHASE           2
+-`define FPGA_HF_READER_MODE_SEND_FULL_MOD           3
+-`define FPGA_HF_READER_MODE_SEND_SHALLOW_MOD        4
+-`define FPGA_HF_READER_MODE_SNIFF_IQ                5
+-`define FPGA_HF_READER_MODE_SNIFF_AMPLITUDE         6
+-`define FPGA_HF_READER_MODE_SNIFF_PHASE             7
+-`define FPGA_HF_READER_MODE_SEND_JAM                8
+-
+-`define FPGA_HF_READER_SUBCARRIER_848_KHZ           0
+-`define FPGA_HF_READER_SUBCARRIER_424_KHZ           1
+-`define FPGA_HF_READER_SUBCARRIER_212_KHZ           2
+-
+-// Options for the HF simulated tag, how to modulate
+-`define FPGA_HF_SIMULATOR_NO_MODULATION             0
+-`define FPGA_HF_SIMULATOR_MODULATE_BPSK             1
+-`define FPGA_HF_SIMULATOR_MODULATE_212K             2
+-`define FPGA_HF_SIMULATOR_MODULATE_424K             4
+-`define FPGA_HF_SIMULATOR_MODULATE_424K_8BIT        5
+-
+-// Options for ISO14443A
+-`define FPGA_HF_ISO14443A_SNIFFER                   0
+-`define FPGA_HF_ISO14443A_TAGSIM_LISTEN             1
+-`define FPGA_HF_ISO14443A_TAGSIM_MOD                2
+-`define FPGA_HF_ISO14443A_READER_LISTEN             3
+-`define FPGA_HF_ISO14443A_READER_MOD                4
+-
+-//options for ISO18092 / Felica
+-`define FPGA_HF_ISO18092_FLAG_NOMOD                 1 // 0001 disable modulation module
+-`define FPGA_HF_ISO18092_FLAG_424K                  2 // 0010 should enable 414k mode (untested). No autodetect
+-`define FPGA_HF_ISO18092_FLAG_READER                4 // 0100 enables antenna power, to act as a reader instead of tag
+-
+-`include "hi_reader.v"
+-`include "hi_simulate.v"
+-`include "hi_iso14443a.v"
+-`include "hi_sniffer.v"
+-`include "util.v"
+-// `include "hi_flite.v"
+-`include "hi_get_trace.v"
++//For ISE 10.1 PROJ,IDE auto include
++//`include "hi_reader.v"
++//`include "hi_simulate.v"
++//`include "hi_iso14443a.v"
++//`include "hi_sniffer.v"
++//`include "util.v"
++//`include "hi_flite.v"
++//`include "hi_get_trace.v"
+ 
+-module fpga_hf(
++module fpga_hfmod(
+     input spck, output miso, input mosi, input ncs,
+     input pck0, input ck_1356meg, input ck_1356megb,
+     output pwr_lo, output pwr_hi,
+@@ -191,7 +145,7 @@
+ );
+ 
+ // 100 - HF ISO18092 FeliCa
+-/*
++
+ hi_flite hfl(
+     ck_1356megb,
+     hfl_pwr_lo, hfl_pwr_hi, hfl_pwr_oe1, hfl_pwr_oe2, hfl_pwr_oe3, hfl_pwr_oe4,
+@@ -200,7 +154,7 @@
+     hfl_dbg,
+     minor_mode
+ );
+-*/
++
+ 
+ // 101 - HF get trace
+ hi_get_trace gt(
+diff -Naur fpga/fpga_lf.v fpga/fpga_lf.v
+--- fpga/fpga_lf.v	2021-07-02 13:37:45.898134881 +0200
++++ fpga/fpga_lf.v	2021-07-02 09:47:41.478286478 +0200
+@@ -25,14 +25,15 @@
+ `define FPGA_LF_EDGE_DETECT_READER_FIELD            1
+ `define FPGA_LF_EDGE_DETECT_TOGGLE_MODE             2
+ 
+-`include "lo_read.v"
+-`include "lo_passthru.v"
+-`include "lo_edge_detect.v"
+-`include "lo_adc.v"
+-`include "util.v"
+-`include "clk_divider.v"
++//For ISE 10.1 PROJ,IDE auto include
++//`include "lo_read.v"
++//`include "lo_passthru.v"
++//`include "lo_edge_detect.v"
++//`include "lo_adc.v"
++//`include "util.v"
++//`include "clk_divider.v"
+ 
+-module fpga_lf(
++module fpga_lfmod(
+     input spck, output miso, input mosi, input ncs,
+     input pck0, input ck_1356meg, input ck_1356megb,
+     output pwr_lo, output pwr_hi,
+@@ -40,7 +41,8 @@
+     input [7:0] adc_d, output adc_clk, output adc_noe,
+     output ssp_frame, output ssp_din, input ssp_dout, output ssp_clk,
+     input cross_hi, input cross_lo,
+-    output dbg
++    output dbg,
++	 output PWR_LO_EN
+ );
+ 
+ //-----------------------------------------------------------------------------
+@@ -226,6 +228,7 @@
+ mux8 mux_pwr_hi      (major_mode, pwr_hi,    lr_pwr_hi,    le_pwr_hi,    lp_pwr_hi,   la_pwr_hi,    1'b0, 1'b0, 1'b0, 1'b0);
+ mux8 mux_adc_clk     (major_mode, adc_clk,   lr_adc_clk,   le_adc_clk,   lp_adc_clk,  la_adc_clk,   1'b0, 1'b0, 1'b0, 1'b0);
+ mux8 mux_dbg         (major_mode, dbg,       lr_dbg,       le_dbg,       lp_dbg,      la_dbg,       1'b0, 1'b0, 1'b0, 1'b0);
++mux8 mux_ant			(major_mode, PWR_LO_EN, 1'b1,         1'b1,       	 1'b1,        1'b1,         1'b0, 1'b0, 1'b0, 1'b0);
+ 
+ // In all modes, let the ADC's outputs be enabled.
+ assign adc_noe = 1'b0;
+diff -Naur fpga/fpga.ucf fpga/fpga.ucf
+--- fpga/fpga.ucf	2021-07-02 13:37:45.898134881 +0200
++++ fpga/fpga.ucf	2021-07-02 09:47:41.478286478 +0200
+@@ -1,54 +1,56 @@
+ # See the schematic for the pin assignment.
+ 
+-NET "adc_d<0>"  LOC = "P62"  ; 
+-NET "adc_d<1>"  LOC = "P60"  ; 
+-NET "adc_d<2>"  LOC = "P58"  ; 
+-NET "adc_d<3>"  LOC = "P57"  ; 
+-NET "adc_d<4>"  LOC = "P56"  ; 
+-NET "adc_d<5>"  LOC = "P55"  ; 
+-NET "adc_d<6>"  LOC = "P54"  ; 
+-NET "adc_d<7>"  LOC = "P53"  ; 
+ #NET "cross_hi"  LOC = "P88"  ; 
+ #NET "miso"  LOC = "P40"  ; 
++
++# definition of Clock nets:
++NET "ck_1356meg" TNM_NET = "clk_net_1356" ;
++NET "ck_1356megb" TNM_NET = "clk_net_1356b" ;
++NET "pck0" TNM_NET = "clk_net_pck0" ;
++NET "spck" TNM_NET = "clk_net_spck" ;
++
++# Timing specs of clock nets:
++TIMEGRP "clk_net_1356_all" = "clk_net_1356" "clk_net_1356b" ;
++TIMESPEC "TS_1356MHz" = PERIOD "clk_net_1356_all" 74 ns HIGH 37 ns ;
++TIMESPEC "TS_24MHz" = PERIOD "clk_net_pck0" 42 ns HIGH 21 ns ;
++TIMESPEC "TS_4MHz" = PERIOD "clk_net_spck" 250 ns HIGH 125 ns ; 
++NET "FPGA_SWITCH"  CLOCK_DEDICATED_ROUTE = FALSE ;
+ #PACE: Start of Constraints generated by PACE
+ 
+ #PACE: Start of PACE I/O Pin Assignments
+-NET "adc_clk"  LOC = "P46"  ; 
+-NET "adc_noe"  LOC = "P47"  ; 
+-NET "ck_1356meg"  LOC = "P91"  ; 
+-NET "ck_1356megb"  LOC = "P93"  ; 
+-NET "cross_lo"  LOC = "P87"  ; 
++NET "adc_clk"  LOC = "P65"  ; 
++NET "adc_d<0>"  LOC = "P79"  ; 
++NET "adc_d<1>"  LOC = "P78"  ; 
++NET "adc_d<2>"  LOC = "P71"  ; 
++NET "adc_d<3>"  LOC = "P70"  ; 
++NET "adc_d<4>"  LOC = "P69"  ; 
++NET "adc_d<5>"  LOC = "P68"  ; 
++NET "adc_d<6>"  LOC = "P67"  ; 
++NET "adc_d<7>"  LOC = "P66"  ; 
++NET "adc_noe"  LOC = "P62"  ; 
++NET "ck_1356meg"  LOC = "p88"  ;
++NET "ck_1356megb"  LOC = "p89"  ;
++NET "cross_lo"  LOC = "P90"  ;
+ NET "dbg"  LOC = "P22"  ; 
++NET "FPGA_SWITCH"  LOC = "P38"  ; 
+ NET "mosi"  LOC = "P43"  ; 
+-NET "ncs"  LOC = "P44"  ; 
++NET "ncs"  LOC = "P40"  ; 
+ NET "pck0"  LOC = "P36"  ; 
+-NET "pwr_hi"  LOC = "P80"  ; 
+-NET "pwr_lo"  LOC = "P81"  ; 
+-NET "pwr_oe1"  LOC = "P82"  ; 
+-NET "pwr_oe2"  LOC = "P83"  ; 
+-NET "pwr_oe3"  LOC = "P84"  ; 
+-NET "pwr_oe4"  LOC = "P86"  ; 
++NET "pwr_hi"  LOC = "P85"  ;
++NET "pwr_lo"  LOC = "P83"  ;
++NET "PWR_LO_EN"  LOC = "P94"  ;
++NET "pwr_oe1"  LOC = "P84"  ;
++NET "pwr_oe2"  LOC = "P91"  ;
++NET "pwr_oe3"  LOC = "P92"  ; 
++NET "pwr_oe4"  LOC = "P86"  ;
+ NET "spck"  LOC = "P39"  ; 
+-NET "ssp_clk"  LOC = "P71"  ; 
++NET "ssp_clk"  LOC = "P33"  ; 
+ NET "ssp_din"  LOC = "P32"  ; 
+ NET "ssp_dout"  LOC = "P34"  ; 
+-NET "ssp_frame"  LOC = "P31"  ; 
++NET "ssp_frame"  LOC = "P27"  ; 
+ 
+ #PACE: Start of PACE Area Constraints
+ 
+ #PACE: Start of PACE Prohibit Constraints
+ 
+ #PACE: End of Constraints generated by PACE
+-
+-# definition of Clock nets:
+-NET "ck_1356meg" TNM_NET = "clk_net_1356" ;
+-NET "ck_1356megb" TNM_NET = "clk_net_1356b" ;
+-NET "pck0" TNM_NET = "clk_net_pck0" ;
+-NET "spck" TNM_NET = "clk_net_spck" ;
+-
+-# Timing specs of clock nets:
+-TIMEGRP "clk_net_1356_all" = "clk_net_1356" "clk_net_1356b" ;
+-TIMESPEC "TS_1356MHz" = PERIOD "clk_net_1356_all" 74 ns HIGH 37 ns ;
+-TIMESPEC "TS_24MHz" = PERIOD "clk_net_pck0" 42 ns HIGH 21 ns ;
+-TIMESPEC "TS_4MHz" = PERIOD "clk_net_spck" 250 ns HIGH 125 ns ;
+-
+diff -Naur fpga/hi_get_trace.v fpga/hi_get_trace.v
+--- fpga/hi_get_trace.v	2021-07-02 13:37:45.898134881 +0200
++++ fpga/hi_get_trace.v	2021-07-02 09:47:41.478286478 +0200
+@@ -2,6 +2,8 @@
+ //
+ // piwi, Feb 2019
+ //-----------------------------------------------------------------------------
++//For ISE 10.1 PROJ,IDE cannot apply definition to all files
++`include "define.v"
+ 
+ module hi_get_trace(
+        ck_1356megb,
+diff -Naur fpga/hi_iso14443a.v fpga/hi_iso14443a.v
+--- fpga/hi_iso14443a.v	2021-07-02 13:37:45.898134881 +0200
++++ fpga/hi_iso14443a.v	2021-07-02 09:47:41.478286478 +0200
+@@ -38,7 +38,7 @@
+     else if(adc_d < 8) after_hysteresis <= 1'b0;        // U <  1,04V   -> after_hysteresis = 0
+     // Note: was >= 3,53V and <= 1,19V. The new trigger values allow more reliable detection of the first bit
+     // (it might not reach 3,53V due to the high time constant of the high pass filter in the analogue RF part).
+-    // In addition, the new values are more in line with ISO14443-2: "The PICC shall detect the ”End of Pause” after the field exceeds
++    // In addition, the new values are more in line with ISO14443-2: "The PICC shall detect the ”End of Pause�?after the field exceeds
+     // 5% of H_INITIAL and before it exceeds 60% of H_INITIAL." Depending on the signal strength, 60% might well be less than 3,53V.
+ 
+ 
+@@ -209,17 +209,29 @@
+ reg signed [10:0] rx_mod_rising_edge_max;
+ reg curbit;
+ 
+-`define EDGE_DETECT_THRESHOLD   5
++`define EDGE_DETECT_THRESHOLD   3
++`define EDGE_DETECT_THRESHOLDHIGH   20
+ 
+ always @(negedge adc_clk)
+ begin
+     if(negedge_cnt[3:0] == mod_detect_reset_time)
+     begin
+-        // detect modulation signal: if modulating, there must have been a falling AND a rising edge
+-        if ((rx_mod_falling_edge_max > `EDGE_DETECT_THRESHOLD) && (rx_mod_rising_edge_max < -`EDGE_DETECT_THRESHOLD))
+-                curbit <= 1'b1; // modulation
+-            else
+-                curbit <= 1'b0; // no modulation
++		  if (mod_type == `FPGA_HF_ISO14443A_SNIFFER)
++		  begin
++			  // detect modulation signal: if modulating, there must have been a falling AND a rising edge
++			  if ((rx_mod_falling_edge_max > `EDGE_DETECT_THRESHOLDHIGH) && (rx_mod_rising_edge_max < -`EDGE_DETECT_THRESHOLDHIGH))
++						 curbit <= 1'b1; // modulation
++					else
++						 curbit <= 1'b0; // no modulation
++		  end
++		  else
++		  begin
++		  			  // detect modulation signal: if modulating, there must have been a falling AND a rising edge
++			  if ((rx_mod_falling_edge_max > `EDGE_DETECT_THRESHOLD) && (rx_mod_rising_edge_max < -`EDGE_DETECT_THRESHOLD))
++						 curbit <= 1'b1; // modulation
++					else
++						 curbit <= 1'b0; // no modulation
++		  end
+         // reset modulation detector
+         rx_mod_rising_edge_max <= 0;
+         rx_mod_falling_edge_max <= 0;
+diff -Naur fpga/hi_simulate.v fpga/hi_simulate.v
+--- fpga/hi_simulate.v	2021-07-02 13:37:45.898134881 +0200
++++ fpga/hi_simulate.v	2021-07-02 09:47:41.478286478 +0200
+@@ -16,6 +16,10 @@
+ // Jonathan Westhues, October 2006
+ //-----------------------------------------------------------------------------
+ 
++//For ISE 10.1 PROJ,IDE cannot apply definition to all files
++`include "define.v"
++
++
+ module hi_simulate(
+     ck_1356meg,
+     pwr_lo, pwr_hi, pwr_oe1, pwr_oe2, pwr_oe3, pwr_oe4,
+diff -Naur fpga/lo_edge_detect.v fpga/lo_edge_detect.v
+--- fpga/lo_edge_detect.v	2021-07-02 13:37:45.898134881 +0200
++++ fpga/lo_edge_detect.v	2021-07-02 09:47:41.482286523 +0200
+@@ -16,8 +16,10 @@
+ // Output:
+ // - ssp_frame (wired to TIOA1 on the arm) for the edge detection/state
+ // - ssp_clk: cross_lo
+-`include "lp20khz_1MSa_iir_filter.v"
+-`include "lf_edge_detect.v"
++
++//For ISE 10.1 PROJ,IDE auto include
++//`include "lp20khz_1MSa_iir_filter.v"
++//`include "lf_edge_detect.v"
+ 
+ module lo_edge_detect(
+     input pck0, input pck_divclk,
+diff -Naur fpga/mux2_onein.v fpga/mux2_onein.v
+--- fpga/mux2_onein.v	1970-01-01 01:00:00.000000000 +0100
++++ fpga/mux2_onein.v	2021-07-02 13:01:52.117136124 +0200
+@@ -0,0 +1,21 @@
++//-----------------------------------------------------------------------------
++// Two way MUX.
++//
++// kombi, 2020.05
++//-----------------------------------------------------------------------------
++
++module mux2_one(sel, y, x0, x1);
++    input [1:0] sel;
++    input x0, x1;
++    output y;
++    reg y;
++
++always @(x0 or x1 or sel)
++begin
++    case (sel)
++        1'b0: y = x1;
++        1'b1: y = x0;
++    endcase
++end
++
++endmodule
+diff -Naur fpga/mux2_oneout.v fpga/mux2_oneout.v
+--- fpga/mux2_oneout.v	1970-01-01 01:00:00.000000000 +0100
++++ fpga/mux2_oneout.v	2021-07-02 13:01:52.117136124 +0200
+@@ -0,0 +1,21 @@
++//-----------------------------------------------------------------------------
++// Two way MUX.
++//
++// kombi, 2020.05
++//-----------------------------------------------------------------------------
++
++module mux2_oneout(sel, y, x0, x1);
++    input [1:0] sel;
++    output x0, x1;
++    input y;
++    reg x0, x1;
++
++always @(x0 or x1 or sel)
++begin
++    case (sel)
++        1'b0: x1 = y;
++        1'b1: x0 = y;
++    endcase
++end
++
++endmodule
