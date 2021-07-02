@@ -18,7 +18,7 @@ Timeline:
   * They forked at 29c8b3aa4ee8cb3d66a1542d95740d996abe201f and removed the `fpga/` as there is a separate repository for PFGA, see previous point.
   * I created a diff in [proxmark3](proxmark3) subdirectory to get an overview of their change besides `fpga/` removal.
 
-Missing parts:
+Missing parts to be able to develop stuff on our own:
 
 * STM32 and W25Q80
 * app.py
