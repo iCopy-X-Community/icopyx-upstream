@@ -8,3 +8,6 @@ I will post here what I'll get and in parallel I'll try to create source reposit
 Timeline:
 
 * 2021-07-01 Received hardware schematics
+  * Available in [hardware](hardware) subdirectory, working on it in https://github.com/iCopy-X-Community/icopyx-community-hw
+* 2021-07-02 Received reference to FPGA repository (https://gitee.com/kombi/icopy_fpga_3s_0921)
+  * Mirrored as upstream in https://github.com/iCopy-X-Community/icopyx-community-fpga
