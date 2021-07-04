@@ -1,0 +1,433 @@
+diff --git a/armsrc/em4x50.c b/armsrc/em4x50.c
+index 3f0ad9b6b..aa2bfa20c 100644
+--- a/armsrc/em4x50.c
++++ b/armsrc/em4x50.c
+@@ -470,6 +470,8 @@ static bool find_double_listen_window(bool bcommand) {
+ 
+                 if (bcommand) {
+ 
++                    SpinDelay(20);
++
+                     // data transmission from card has to be stopped, because
+                     // a commamd shall be issued
+ 
+@@ -1035,7 +1037,8 @@ void em4x50_wipe(em4x50_data_t *etd) {
+     em4x50_setup_read();
+ 
+     // set gHigh and gLow
+-    if (get_signalproperties() && find_em4x50_tag()) {
++    // if (get_signalproperties() && find_em4x50_tag()) {
++	if (get_signalproperties()) {
+ 
+         // login first
+         if (login(etd->password)) {
+diff --git a/armsrc/felica.c b/armsrc/felica.c
+index 53f78d17b..944b89ffe 100644
+--- a/armsrc/felica.c
++++ b/armsrc/felica.c
+@@ -445,7 +445,7 @@ static void iso18092_setup(uint8_t fpga_minor_mode) {
+     if (DBGLEVEL >= DBG_DEBUG) Dbprintf("Start iso18092_setup");
+ 
+     LEDsoff();
+-    FpgaDownloadAndGo(FPGA_BITSTREAM_HF_FELICA);
++    FpgaDownloadAndGo(FPGA_BITSTREAM_HF);
+ 
+     // allocate command receive buffer
+     BigBuf_free();
+diff --git a/armsrc/fpgaloader.c b/armsrc/fpgaloader.c
+index 2df952214..aa6e84f63 100644
+--- a/armsrc/fpgaloader.c
++++ b/armsrc/fpgaloader.c
+@@ -270,9 +270,9 @@ static void DownloadFPGA_byte(uint8_t w) {
+ static void DownloadFPGA(int bitstream_version, int FpgaImageLen, lz4_streamp compressed_fpga_stream, uint8_t *output_buffer) {
+     int i = 0;
+ 
+-    AT91C_BASE_PIOA->PIO_OER = GPIO_FPGA_ON;
+-    AT91C_BASE_PIOA->PIO_PER = GPIO_FPGA_ON;
+-    HIGH(GPIO_FPGA_ON);  // ensure everything is powered on
++    // AT91C_BASE_PIOA->PIO_OER = GPIO_FPGA_ON;
++    // AT91C_BASE_PIOA->PIO_PER = GPIO_FPGA_ON;
++    // HIGH(GPIO_FPGA_ON);  // ensure everything is powered on
+ 
+     SpinDelay(50);
+ 
+@@ -282,10 +282,15 @@ static void DownloadFPGA(int bitstream_version, int FpgaImageLen, lz4_streamp co
+     AT91C_BASE_PIOA->PIO_ODR =
+         GPIO_FPGA_NINIT |
+         GPIO_FPGA_DONE;
++
+     // PIO controls the following pins
+     AT91C_BASE_PIOA->PIO_PER =
+         GPIO_FPGA_NINIT |
+-        GPIO_FPGA_DONE;
++        GPIO_FPGA_DONE  |
++        //3S100E M2 & M3 PIO ENA
++        GPIO_SPCK |
++        GPIO_MOSI;
++
+     // Enable pull-ups
+     AT91C_BASE_PIOA->PIO_PPUER =
+         GPIO_FPGA_NINIT |
+@@ -295,12 +300,19 @@ static void DownloadFPGA(int bitstream_version, int FpgaImageLen, lz4_streamp co
+     HIGH(GPIO_FPGA_NPROGRAM);
+     LOW(GPIO_FPGA_CCLK);
+     LOW(GPIO_FPGA_DIN);
++
+     // These pins are outputs
+     AT91C_BASE_PIOA->PIO_OER =
+         GPIO_FPGA_NPROGRAM |
+         GPIO_FPGA_CCLK     |
+-        GPIO_FPGA_DIN;
+-
++        GPIO_FPGA_DIN      |
++        //3S100E M2 & M3 OUTPUT ENA
++        GPIO_SPCK |
++        GPIO_MOSI;
++
++    //3S100E M2 & M3 OUTPUT HIGH		
++    HIGH(GPIO_SPCK);
++    HIGH(GPIO_MOSI);
+     // enter FPGA configuration mode
+     LOW(GPIO_FPGA_NPROGRAM);
+     SpinDelay(50);
+@@ -319,6 +331,12 @@ static void DownloadFPGA(int bitstream_version, int FpgaImageLen, lz4_streamp co
+         return;
+     }
+ 
++    //3S100E M2 & M3 RETURN TO NORMAL
++    LOW(GPIO_SPCK);
++    LOW(GPIO_MOSI);
++    AT91C_BASE_PIOA->PIO_PDR = GPIO_SPCK | GPIO_MOSI;
++    //
++
+     for (i = 0; i < FpgaImageLen; i++) {
+         int b = get_from_fpga_stream(bitstream_version, compressed_fpga_stream, output_buffer);
+         if (b < 0) {
+@@ -396,6 +414,41 @@ static int bitparse_find_section(int bitstream_version, char section_name, uint3
+     return result;
+ }
+ 
++//----------------------------------------------------------------------------
++// Change FPGA image status, if image loaded.
++// bitstream_version is your new fpga image version
++// return true if can change.
++// return false if image is unloaded.
++//----------------------------------------------------------------------------
++bool FpgaConfCurrentMode(int bitstream_version) {
++    // fpga "XC3S100E" image merge
++    // If fpga image is no init
++    // We need load hf_lf_allinone.bit
++    if (downloaded_bitstream != 0) {
++        // test start
++        // PIO controls the following pins
++        AT91C_BASE_PIOA->PIO_PER = GPIO_FPGA_SWITCH;
++        // These pins are outputs
++        AT91C_BASE_PIOA->PIO_OER = GPIO_FPGA_SWITCH;
++
++        // try to turn off antenna
++        FpgaWriteConfWord(FPGA_MAJOR_MODE_OFF);
++
++        if (bitstream_version == FPGA_BITSTREAM_LF) {
++            LOW(GPIO_FPGA_SWITCH);
++        }
++        else {
++            HIGH(GPIO_FPGA_SWITCH);
++        }
++        // update downloaded_bitstream
++        downloaded_bitstream = bitstream_version;
++        // turn off antenna
++        FpgaWriteConfWord(FPGA_MAJOR_MODE_OFF);
++        return true;
++    }
++    return false;
++}
++
+ //----------------------------------------------------------------------------
+ // Check which FPGA image is currently loaded (if any). If necessary
+ // decompress and load the correct (HF or LF) image to the FPGA
+@@ -408,6 +461,12 @@ void FpgaDownloadAndGo(int bitstream_version) {
+         return;
+     }
+ 
++    // If we can change image version
++    // direct return.
++    if (FpgaConfCurrentMode(bitstream_version)) {
++        return;
++    }
++
+     // Send waiting time extension request as this will take a while
+     send_wtx(1500);
+ 
+@@ -431,6 +490,10 @@ void FpgaDownloadAndGo(int bitstream_version) {
+         downloaded_bitstream = bitstream_version;
+     }
+ 
++    // first download fpga image to hf
++    // we need to change fpga status to hf
++    FpgaConfCurrentMode(bitstream_version);
++
+     // turn off antenna
+     FpgaWriteConfWord(FPGA_MAJOR_MODE_OFF);
+ 
+diff --git a/bootrom/bootrom.c b/bootrom/bootrom.c
+index 77305f22c..7eabaf562 100644
+--- a/bootrom/bootrom.c
++++ b/bootrom/bootrom.c
+@@ -113,6 +113,7 @@ static void UsbPacketReceived(uint8_t *packet) {
+         break;
+ 
+         case CMD_FINISH_WRITE: {
++            if (c->arg[1] == CMD_ACK && c->arg[2] == (CMD_ACK + CMD_NACK)) {
+             for (int j = 0; j < 2; j++) {
+                 uint32_t flash_address = arg0 + (0x100 * j);
+                 AT91PS_EFC efc_bank = AT91C_BASE_EFC0;
+@@ -148,6 +149,7 @@ static void UsbPacketReceived(uint8_t *packet) {
+                     reply_old(CMD_NACK, sr, 0, 0, 0, 0);
+                 }
+             }
++            }
+         }
+         break;
+ 
+diff --git a/client/src/cmdhf15.c b/client/src/cmdhf15.c
+index 421e7488f..bed76ca89 100644
+--- a/client/src/cmdhf15.c
++++ b/client/src/cmdhf15.c
+@@ -1716,10 +1716,10 @@ static int CmdHF15Restore(const char *Cmd) {
+         if (addressed_mode) {
+             char uidhex[17] = {0x00};
+             hex_to_buffer((uint8_t *)uidhex, uid, sizeof(uid), sizeof(uidhex) - 1, 0, false, true);
+-            hex_to_buffer((uint8_t *)hex, data + i, blocksize, sizeof(hex) - 1, 0, false, true);
++            hex_to_buffer((uint8_t *)hex, data + bytes, blocksize, sizeof(hex) - 1, 0, false, true);
+             snprintf(tmpCmd, sizeof(tmpCmd), "%s %s %u %s", newPrefix, uidhex, i, hex);
+         } else {
+-            hex_to_buffer((uint8_t *)hex, data + i, blocksize, sizeof(hex) - 1, 0, false, true);
++            hex_to_buffer((uint8_t *)hex, data + bytes, blocksize, sizeof(hex) - 1, 0, false, true);
+             snprintf(tmpCmd, sizeof(tmpCmd), "%s u %u %s", newPrefix, i, hex);
+         }
+ 
+diff --git a/client/src/cmdhfmf.c b/client/src/cmdhfmf.c
+index df9d07c54..ef493041d 100644
+--- a/client/src/cmdhfmf.c
++++ b/client/src/cmdhfmf.c
+@@ -827,7 +827,7 @@ static int CmdHF14AMfRdSc(const char *Cmd) {
+ 
+             uint8_t blocks = 4;
+             uint8_t start = sectorNo * 4;
+-            if (sectorNo > 32) {
++            if (sectorNo >= 32) {
+                 blocks = 16;
+                 start = 128 + (sectorNo - 32) * 16;
+             }
+@@ -1326,6 +1326,7 @@ static int CmdHF14AMfNested(const char *Cmd) {
+     uint64_t key64 = 0;
+     bool transferToEml = false;
+     bool createDumpFile = false;
++    bool useflashMem = false;
+ 
+     if (strlen(Cmd) < 3) return usage_hf14_nested();
+ 
+@@ -1368,7 +1369,7 @@ static int CmdHF14AMfNested(const char *Cmd) {
+         ctmp = tolower(param_getchar(Cmd, j));
+         transferToEml |= (ctmp == 't');
+         createDumpFile |= (ctmp == 'd');
+-
++        useflashMem |= (ctmp == 'm');
+         j++;
+     }
+ 
+@@ -1446,7 +1447,7 @@ static int CmdHF14AMfNested(const char *Cmd) {
+         }
+ 
+         PrintAndLogEx(SUCCESS, "Testing known keys. Sector count "_YELLOW_("%d"), SectorsCnt);
+-        int res = mfCheckKeys_fast(SectorsCnt, true, true, 1, ARRAYLEN(g_mifare_default_keys) + 1, keyBlock, e_sector, false);
++        int res = mfCheckKeys_fast(SectorsCnt, true, true, 1, ARRAYLEN(g_mifare_default_keys) + 1, keyBlock, e_sector, useflashMem);
+         if (res == PM3_SUCCESS) {
+             PrintAndLogEx(SUCCESS, "Fast check found all keys");
+             goto jumptoend;
+@@ -3649,7 +3650,7 @@ static int CmdHF14AMfEGetSc(const char *Cmd) {
+     PrintAndLogEx(NORMAL, "----+------------------------------------------------");
+     uint8_t blocks = 4;
+     uint8_t start = sector * 4;
+-    if (sector > 32) {
++    if (sector >= 32) {
+         blocks = 16;
+         start = 128 + (sector - 32) * 16;
+     }
+@@ -4345,7 +4346,7 @@ static int CmdHF14AMfCGetSc(const char *Cmd) {
+     PrintAndLogEx(NORMAL, "----+------------------------------------------------");
+     uint8_t blocks = 4;
+     uint8_t start = sector * 4;
+-    if (sector > 32) {
++    if (sector >= 32) {
+         blocks = 16;
+         start = 128 + (sector - 32) * 16;
+     }
+diff --git a/client/src/cmdhfmfu.c b/client/src/cmdhfmfu.c
+index a9b03cb46..e8d3cd82e 100644
+--- a/client/src/cmdhfmfu.c
++++ b/client/src/cmdhfmfu.c
+@@ -2327,7 +2327,7 @@ static int CmdHF14AMfURestore(const char *Cmd) {
+         PrintAndLogEx(NORMAL, "authentication with keytype[%x]  %s\n", (uint8_t)(keytype & 0xff), sprint_hex(p_authkey, 4));
+ 
+         // otp, uid, lock, cfg1, cfg0, dynlockbits
+-        uint8_t blocks[] = {3, 0, 1, 2, pages - 5, pages - 4, pages - 3};
++        uint8_t blocks[] = {3, 0, 1, 2, pages - 5, pages - 4, pages - 3, pages - 2, pages - 1};
+         for (uint8_t i = 0; i < ARRAYLEN(blocks); i++) {
+             uint8_t b = blocks[i];
+             memcpy(data, mem->data + (b * 4), 4);
+diff --git a/client/src/cmdhw.c b/client/src/cmdhw.c
+index 4c93210eb..38d5d4f8b 100644
+--- a/client/src/cmdhw.c
++++ b/client/src/cmdhw.c
+@@ -639,7 +639,7 @@ int CmdHW(const char *Cmd) {
+ }
+ 
+ void pm3_version(bool verbose, bool oneliner) {
+-
++	if(true) return;
+ #if defined(__MINGW64__)
+ # define PM3CLIENTCOMPILER "MinGW-w64 "
+ #elif defined(__MINGW32__)
+diff --git a/client/src/cmdlf.c b/client/src/cmdlf.c
+index 67042259c..778d897be 100644
+--- a/client/src/cmdlf.c
++++ b/client/src/cmdlf.c
+@@ -1361,12 +1361,12 @@ static bool CheckChipType(bool getDeviceData) {
+     }
+ 
+     // check for em4x50 chips
+-    if (detect_4x50_block()) {
++    /*if (detect_4x50_block()) {
+         PrintAndLogEx(SUCCESS, "Chipset detection: " _GREEN_("EM4x50"));
+         PrintAndLogEx(HINT, "Hint: try " _YELLOW_("`lf em 4x50`") " commands");
+         retval = true;
+         goto out;
+-    }
++    }*/
+ 
+     PrintAndLogEx(NORMAL, "Couldn't identify a chipset");
+ out:
+@@ -1414,12 +1414,12 @@ int CmdLFfind(const char *Cmd) {
+             }
+         }
+ 
+-        if (IfPm3EM4x50()) {
++        /*if (IfPm3EM4x50()) {
+             if (read_em4x50_uid() == PM3_SUCCESS) {
+                 PrintAndLogEx(SUCCESS, "\nValid " _GREEN_("EM4x50 ID") " found!");
+                 return PM3_SUCCESS;
+             }
+-        }
++        }*/
+ 
+         // only run if graphbuffer is just noise as it should be for hitag
+         // The improved noise detection will find Cotag.
+@@ -1451,7 +1451,6 @@ int CmdLFfind(const char *Cmd) {
+     if (demodIOProx() == PM3_SUCCESS) { PrintAndLogEx(SUCCESS, "\nValid " _GREEN_("IO Prox ID") " found!"); goto out;}
+     if (demodParadox() == PM3_SUCCESS) { PrintAndLogEx(SUCCESS, "\nValid " _GREEN_("Paradox ID") " found!"); goto out;}
+     if (demodNexWatch() == PM3_SUCCESS) { PrintAndLogEx(SUCCESS, "\nValid " _GREEN_("NexWatch ID") " found!"); goto out;}
+-    if (demodIndala() == PM3_SUCCESS) { PrintAndLogEx(SUCCESS, "\nValid " _GREEN_("Indala ID") " found!");  goto out;}
+     if (demodEM410x() == PM3_SUCCESS) { PrintAndLogEx(SUCCESS, "\nValid " _GREEN_("EM410x ID") " found!"); goto out;}
+     if (demodFDX(true) == PM3_SUCCESS) { PrintAndLogEx(SUCCESS, "\nValid " _GREEN_("FDX-B ID") " found!"); goto out;}
+     if (demodGuard() == PM3_SUCCESS) { PrintAndLogEx(SUCCESS, "\nValid " _GREEN_("Guardall G-Prox II ID") " found!"); goto out; }
+@@ -1466,6 +1465,7 @@ int CmdLFfind(const char *Cmd) {
+     if (demodSecurakey() == PM3_SUCCESS) { PrintAndLogEx(SUCCESS, "\nValid " _GREEN_("Securakey ID") " found!"); goto out;}
+     if (demodViking() == PM3_SUCCESS) { PrintAndLogEx(SUCCESS, "\nValid " _GREEN_("Viking ID") " found!"); goto out;}
+     if (demodGallagher() == PM3_SUCCESS) { PrintAndLogEx(SUCCESS, "\nValid " _GREEN_("GALLAGHER ID") " found!"); goto out;}
++    if (demodIndala() == PM3_SUCCESS) { PrintAndLogEx(SUCCESS, "\nValid " _GREEN_("Indala ID") " found!");  goto out; }
+ 
+ //    if (demodTI() == PM3_SUCCESS) { PrintAndLogEx(SUCCESS, "\nValid " _GREEN_("Texas Instrument ID") " found!"); goto out;}
+ //    if (demodFermax() == PM3_SUCCESS) { PrintAndLogEx(SUCCESS, "\nValid " _GREEN_("Fermax ID") " found!"); goto out;}
+diff --git a/client/src/flash.c b/client/src/flash.c
+index 249f7d826..7e10be17c 100644
+--- a/client/src/flash.c
++++ b/client/src/flash.c
+@@ -508,7 +508,8 @@ static int write_block(uint32_t address, uint8_t *data, uint32_t length) {
+     memset(block_buf, 0xFF, BLOCK_SIZE);
+     memcpy(block_buf, data, length);
+     PacketResponseNG resp;
+-    SendCommandBL(CMD_FINISH_WRITE, address, 0, 0, block_buf, length);
++    // SendCommandBL(CMD_FINISH_WRITE, address, 0, 0, block_buf, length);
++    SendCommandBL(CMD_FINISH_WRITE, address, CMD_ACK, CMD_ACK + CMD_NACK, block_buf, length);
+     int ret = wait_for_ack(&resp);
+     if (ret && resp.oldarg[0]) {
+         uint32_t lock_bits = resp.oldarg[0] >> 16;
+diff --git a/client/src/proxmark3.c b/client/src/proxmark3.c
+index 1358137bf..841579446 100644
+--- a/client/src/proxmark3.c
++++ b/client/src/proxmark3.c
+@@ -90,6 +90,10 @@ static void showBanner_logo(LogoMode mode) {
+ }
+ 
+ static void showBanner(void) {
++	
++	if(true){
++		return;
++	}
+ 
+     g_printAndLog = PRINTANDLOG_PRINT;
+     PrintAndLogEx(NORMAL, "\n");
+@@ -414,6 +418,7 @@ check_script:
+                 // process cmd
+                 g_pendingPrompt = false;
+                 int ret = CommandReceived(cmd);
++				PrintAndLogEx(NORMAL, "\nNikola.D: %d", ret);
+                 // exit or quit
+                 if (ret == PM3_EFATAL)
+                     break;
+diff --git a/client/src/ui.c b/client/src/ui.c
+index f05a96682..3f4dfb13e 100644
+--- a/client/src/ui.c
++++ b/client/src/ui.c
+@@ -296,7 +296,7 @@ void PrintAndLogEx(logLevel_t level, const char *fmt, ...) {
+ static void fPrintAndLog(FILE *stream, const char *fmt, ...) {
+     va_list argptr;
+     static FILE *logfile = NULL;
+-    static int logging = 1;
++    static int logging = 0;  // close the log file output
+     char buffer[MAX_PRINT_BUFFER] = {0};
+     char buffer2[MAX_PRINT_BUFFER] = {0};
+     char buffer3[MAX_PRINT_BUFFER] = {0};
+diff --git a/common_arm/usb_cdc.c b/common_arm/usb_cdc.c
+index 34400f4d5..dda46598f 100644
+--- a/common_arm/usb_cdc.c
++++ b/common_arm/usb_cdc.c
+@@ -376,9 +376,9 @@ static const char StrManufacturer[] = {
+ };
+ 
+ static const char StrProduct[] = {
+-    20,         // Length
++    34,         // Length
+     0x03,       // Type is string
+-    'p', 0, 'r', 0, 'o', 0, 'x', 0, 'm', 0, 'a', 0, 'r', 0, 'k', 0, '3', 0
++    'p', 0, 'r', 0, 'o', 0, 'x', 0, 'm', 0, 'a', 0, 'r', 0, 'k', 0, '3', 0, '-', 0, 'n', 0, 'i', 0, 'k', 0, 'o', 0, 'l', 0, 'a', 0, 
+ };
+ 
+ static const char StrSerialNumber[] = {
+diff --git a/common_fpga/fpga.h b/common_fpga/fpga.h
+index c8390ff7e..d7cf8828a 100644
+--- a/common_fpga/fpga.h
++++ b/common_fpga/fpga.h
+@@ -12,7 +12,7 @@
+ 
+ #define FPGA_BITSTREAM_FIXED_HEADER_SIZE    sizeof(bitparse_fixed_header)
+ #define FPGA_INTERLEAVE_SIZE                288
+-#define FPGA_CONFIG_SIZE                    42336L  // our current fpga_[lh]f.bit files are 42175 bytes. Rounded up to next multiple of FPGA_INTERLEAVE_SIZE
++#define FPGA_CONFIG_SIZE                    72864L  // our current fpga_[lh]f.bit files are 42175 bytes. Rounded up to next multiple of FPGA_INTERLEAVE_SIZE
+ #define FPGA_RING_BUFFER_BYTES              (1024 * 39)
+ #define FPGA_TRACE_SIZE                     3072
+ 
+diff --git a/include/config_gpio.h b/include/config_gpio.h
+index 89e63de5d..01d9e565d 100644
+--- a/include/config_gpio.h
++++ b/include/config_gpio.h
+@@ -43,7 +43,7 @@
+ #define GPIO_BUTTON         AT91C_PIO_PA23
+ #define GPIO_USB_PU         AT91C_PIO_PA24
+ #define GPIO_RELAY          AT91C_PIO_PA25
+-#define GPIO_FPGA_ON        AT91C_PIO_PA26
++#define GPIO_FPGA_SWITCH    AT91C_PIO_PA26
+ #define GPIO_FPGA_DONE      AT91C_PIO_PA27
+ #define GPIO_FPGA_NPROGRAM  AT91C_PIO_PA28
+ #define GPIO_FPGA_CCLK      AT91C_PIO_PA29
