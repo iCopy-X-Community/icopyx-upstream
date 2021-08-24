@@ -5,8 +5,6 @@ I requested the vendor to honor the open source license of the Proxmark3 schemat
 
 I will post here what I'll get and in parallel I'll try to create source repositories to enable some community development on it. Depending on what we'll get...
 
-2021-08-24 situation:
-
 ## Hardware
 
 * [Schematics & Gerber of the green PCB](https://github.com/Nikola-Lab/icopy_hw_main_pcb)
@@ -23,7 +21,13 @@ I will post here what I'll get and in parallel I'll try to create source reposit
 ## STM32
 
 * [STM32 firmware](https://github.com/Nikola-Lab/icopy_stm32)
-* untested
+  * untested
+
+## STM32 tools
+
+* [icopy_time_synchronizer](https://github.com/Nikola-Lab/icopy_time_synchronizer), a tool to setup the STM32 RTC from the host(?)
+  * untested
+* [CSerialPort](https://github.com/Nikola-Lab/CSerialPort), fork of a serial library, used by icopy_time_synchronizer
 ## Proxmark3
 
 * [Proxmark3 upstream code snapshot](proxmark3/2021-07-02-09-41-01-766.zip)
