@@ -11,11 +11,28 @@ I will post here what I'll get and in parallel I'll try to create source reposit
 * [Schematics & Gerber of the antenna PCB](https://github.com/Nikola-Lab/icopy_hw_ant_pcb)
 * [Schematics & Gerber of the FPC connecting green PCB & Nanopi NEO](https://github.com/Nikola-Lab/icopy_hw_usb_fpc)
 
+
+
+A [previous version of the main PCB schematics](https://github.com/Nikola-Lab/icopy_hw_main_pcb/blob/bb14741874880ff248141fc57d71e8be8f2f4c7b/SCH/ICOPY-X_V1.5.pdf)
+contained PDF JavaScript pop-ups (visible only with Acrobat) from which we could extract the BoM.
+Beware quantities and references are not present.
+
+```
+sudo apt install qpdf uni2ascii
+qpdf -qdf ICOPY-X_V1.5.pdf ICOPY-X_V1.5q.pdf
+sed -n '/popUp/s/.*popUpMenu\\(\([^;]*\)\\);.*/\1/p' ICOPY-X_V1.5q.pdf|sed 's/\\\\/\\/g;s/\\\([()]\)/\1/g'|ascii2uni -a U -q|sort|uniq > bom.txt
+python3 bomtxt2csv.py
+```
+
+Using [bomtxt2csv.py](hw/bomtxt2csv.py). Then converting the `.csv` into `.ods` with LibreOffice -> [bom.ods](hw/bom.ods)
+
+Note that current upstream contains now the [BOM of the main PCB](https://github.com/Nikola-Lab/icopy_hw_main_pcb/tree/main/BOM).
+
 ## FPGA
 
 * [FPGA upstream code](https://github.com/Nikola-Lab/icopy_fpga_3s_0921)
   * See [diff](fpga/icopyx-fpga.diff) to compare Verilog files with FPGA code from Proxmark3
-* A document in Chinese details these changes, cf [fpga](fpga) subdirectory. Translation [here](https://github.com/iCopy-X-Community/icopyx-community-hw/blob/master/FPGA%20Porting%20changes%20(ARM)(FPGA)V1.0_20210702.txt).
+* A document in Chinese details these changes, cf [fpga](fpga) subdirectory with also a Google translated version.
 * [Community fork](https://github.com/iCopy-X-Community/icopyx-community-fpga) with some cleaning & linux compilation script
   * Community fork version **is now merged in Proxmark3/RRG repo** in [fpga-xc3s100e](https://github.com/RfidResearchGroup/proxmark3/tree/master/fpga-xc3s100e) subdir.
 ## STM32

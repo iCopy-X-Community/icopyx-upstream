@@ -1,0 +1,82 @@
+1. cat FPGA移植修改项(ARM)(FPGA)V1.0_20210702.txt | recode CN-GB..UTF8
+2. Google translated
+======================================================================
+
+Transplant model: From XC2S30 to XC3S100E
+
+// ARM START
+File base path: armsrc/
+File modification list:
+    | File name
+    | fpgaloader.c:
+    | ************************************************************************************
+    | Modified the DownloadFPGA() function near line 260 (the most important change for XC3S100E)
+    | Pin operation: M2, M3
+    | 1.  Near line 290, first enable GPIO_SPCK and GPIO_MOSI in PIO_PER
+    | 2. Near line 308, configure GPIO_SPCK and GPIO_MOSI as output pins in PIO_OER
+    | 3. Pull up GPIO_SPCK and GPIO_MOSI near line 310
+    | ************ Here is a section of FPGA firmware download process **************
+    | 4. Near line 330, after confirming in the while loop that the FPGA is ready to receive data signals,
+    | Pull down the two pins GPIO_SPCK and GPIO_MOSI, and turn off the enable of these two pins in the PIO_PDR configuration
+    | ************************************************************************************
+    | Added FpgaConfCurrentMode() function near line 416 (only used when using HF&LF merge firmware)
+    | Pin operation: PA1
+    | 1. Determine if the firmware is currently initialized
+    | 2. If yes, call FpgaWriteConfWord(FPGA_MAJOR_MODE_OFF); try to turn off the antenna
+    | 3. Then configure the enable and output and pull up GPIO_PA1 to inform the merged version of FPGA firmware to switch to the specified mode
+    | 4. Finally, call FpgaWriteConfWord(FPGA_MAJOR_MODE_OFF) again; try to turn off the antenna
+    | 5. Returning true means that the current merged firmware is directly switched to the state successfully, otherwise it needs to return false to allow the developer to flash the firmware once
+    | Note: PA1 uses LF firmware for low level, PA1 uses HF firmware for high level
+    | ************************************************************************************
+    | Modified the FpgaDownloadAndGo() function near line 448
+    | After checking whether the firmware is the version that needs to be switched, if not, then
+    | 1. Near line 456, judge whether you can directly switch to the merged version of the firmware, using the FpgaConfCurrentMode() function
+    | 2. If the switch is successful, it means that the firmware has been downloaded to the FPGA, and the next operation is skipped directly
+    | 3. If the switch fails, the FPGA has not been initialized yet, and the next initialization download process needs to be started
+    | 4. Near line 486, after downloading the firmware successfully, you need to call the FpgaConfCurrentMode() function again to raise the PA1 pin
+    | Note: The HF firmware will be downloaded by default if the switch fails, so we need to pull up PA1 after the download is complete to make the FPGA run on the HF firmware
+    | ######################################################
+    | New pin to switch FPGA mode! ! !
+    | File name
+    | config_gpio.h:
+    | ************************************************************************************
+    | Modified the naming of AT91C_PIO_PA26 pin near line 47
+    | 1. Change from GPIO_FPGA_ON to GPIO_FPGA_SWITCH
+    | ######################################################
+    | File name
+    | fpgaloader.c:
+    | ************************************************************************************
+    | 1. All operations on the original GPIO_FPGA_ON are commented near line 270
+    | 2. Change all original operations on PA1 in the FpgaConfCurrentMode function to operations on GPIO_FPGA_SWITCH
+// ARM END
+// FPGA START
+Base path of fpga file: FPGA/
+File structure of fpga project:
+fpga_hf.v-
+    |! --Accelerate the switching speed of HF and LF commands (no need for firmware switching download)
+    |! --Use FRsel pin control to select the target module, high is high frequency, low is low frequency
+    |! --Adopt two MUX control signals to the target module
+    |--fpga_lfmo.v //Original fpga_lf.v
+        |! --Add antenna control IO, control LF antenna enable, turn on the antenna at high level, and turn off the antenna at low level.
+            |! --Enhance the stability when LF writes EM4305 T5577 card.
+            |! --Using mux (mux_ant) control, turn off the command (111) to pull down
+        |! --Due to the use of isa editing, isa automatically quotes, so comment out the quote
+        |! --Module name is changed to fpga_lfmod, and the file is renamed to fpga_lfmod.v
+        |--lo_edge_detect
+            |! --Due to the use of isa editing, isa automatically quotes, so comment out the quote
+    |--fpga_hfmod.v //Original fpga_hf.v
+        |! --Due to the use of isa editing, isa automatically quotes, so comment out the quote
+        |! --Module name is changed to fpga_hfmod, and the file is renamed to fpga_hfmod.v
+        |--define.v //The isa quoted file cannot be quoted multiple times, so it is included in a separate file
+        |--hi_get_trace
+            |--define.v //The isa quoted file cannot be quoted multiple times, so it is included in a separate file
+        |! -Near line 230, the threshold of the filtering algorithm is added (the original value is 5, reduced to 3, reducing the height of the blind zone of the high-noise card), and a threshold of 20 is added, and the high threshold is used in the sniffing mode. Use a low threshold when reading a card, (if sniffing uses a low threshold, the efficiency will be very low)
+
+    |--mux2-one.v //Output-input mode 2 select 1mux
+        |! --Files added
+    |--mux2-oneout.v //input-output mode 2 select 1mux
+        |! --Files added
+    |--fpga.ucf //New pin assignment, in addition to the original pins, a pin for selecting high and low frequency mode and low frequency antenna is added
+
+TODO: After verifying that the program module is switched and then switched back, will the module work abnormally due to the last residual data?
+// FPGA END
