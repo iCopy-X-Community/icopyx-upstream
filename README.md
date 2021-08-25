@@ -38,13 +38,16 @@ Note that current upstream contains now the [BOM of the main PCB](https://github
 ## STM32
 
 * [STM32 firmware](https://github.com/Nikola-Lab/icopy_stm32)
+  * open source license: MIT
   * untested
 
 ## STM32 tools
 
 * [icopy_time_synchronizer](https://github.com/Nikola-Lab/icopy_time_synchronizer), a tool to setup the STM32 RTC from the host(?)
+  * open source license: MIT
   * untested
 * [CSerialPort](https://github.com/Nikola-Lab/CSerialPort), fork of a serial library, used by icopy_time_synchronizer
+  * open source license: LGPL
 ## Proxmark3
 
 * [Proxmark3 upstream code snapshot](proxmark3/2021-07-02-09-41-01-766.zip)
